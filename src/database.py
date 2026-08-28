@@ -37,7 +37,7 @@ engine = create_engine(
     echo=False
 )
 
-# Enable WAL (Write-Ahead Logging) mode on SQLite to prevent operational locks
+# Enable WAL mode on SQLite to prevent locks and concurrency conflicts
 @event.listens_for(engine, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):
     cursor = dbapi_connection.cursor()
@@ -295,20 +295,29 @@ FIRST_NAMES = ["Aarav", "Priya", "Rohan", "Sneha", "Ananya", "Kiran", "Vikram", 
 LAST_NAMES = ["Sharma", "Patel", "Iyer", "Reddy", "Roy", "Varma", "Sen", "Nair", "Kulkarni", "Hegde", "Deshmukh", "Bhat", "Rao", "Joshi", "Gupta", "Agarwal", "Mishra", "Pillai", "Menon", "Shetty"]
 
 
+def seed_default_users_safe(session):
+    """Safely seeds default users only if they do not already exist in the database."""
+    default_users_data = [
+        {"username": "admin", "email": "admin@pragyan.ai", "password_hash": hash_password("admin123"), "full_name": "PragyanAI Executive Admin", "role": "PragyanAI Engine", "organization_or_dept": "PragyanAI Core", "status": "Approved", "approved_by": "System Genesis"},
+        {"username": "placement_head", "email": "head@pragyan.edu", "password_hash": hash_password("head123"), "full_name": "Dr. Director Placement", "role": "Placement Head", "organization_or_dept": "Central T&P Cell", "status": "Approved", "approved_by": "PragyanAI Admin"},
+        {"username": "student_arjun", "email": "arjun@pragyan.edu", "password_hash": hash_password("student123"), "full_name": "Arjun Sharma", "role": "Student", "organization_or_dept": "AIML", "status": "Approved", "approved_by": "Placement Cell"},
+        {"username": "nvidia_recruiter", "email": "hiring@nvidia.com", "password_hash": hash_password("nvidia123"), "full_name": "Lead Technical Recruiter", "role": "Hiring Partner", "organization_or_dept": "NVIDIA Corporation", "status": "Approved", "approved_by": "Placement Head"}
+    ]
+
+    for u in default_users_data:
+        existing = session.query(UserModel).filter(UserModel.username == u["username"]).first()
+        if not existing:
+            session.add(UserModel(**u))
+    session.commit()
+
+
 def bootstrap_synthetic_dataset(session):
     """Dynamically populates 1,500+ records across all 10 schemas."""
     random.seed(42)
     np.random.seed(42)
 
-    # 1. Seed Users
-    default_users = [
-        UserModel(username="admin", email="admin@pragyan.ai", password_hash=hash_password("admin123"), full_name="PragyanAI Executive Admin", role="PragyanAI Engine", organization_or_dept="PragyanAI Core", status="Approved", approved_by="System Genesis"),
-        UserModel(username="placement_head", email="head@pragyan.edu", password_hash=hash_password("head123"), full_name="Dr. Director Placement", role="Placement Head", organization_or_dept="Central T&P Cell", status="Approved", approved_by="PragyanAI Admin"),
-        UserModel(username="student_arjun", email="arjun@pragyan.edu", password_hash=hash_password("student123"), full_name="Arjun Sharma", role="Student", organization_or_dept="AIML", status="Approved", approved_by="Placement Cell"),
-        UserModel(username="nvidia_recruiter", email="hiring@nvidia.com", password_hash=hash_password("nvidia123"), full_name="Lead Technical Recruiter", role="Hiring Partner", organization_or_dept="NVIDIA Corporation", status="Approved", approved_by="Placement Head")
-    ]
-    session.add_all(default_users)
-    session.commit()
+    # 1. Safely Seed Users
+    seed_default_users_safe(session)
 
     # 2. Seed Companies, Drives, and Job Descriptions
     companies_objs = []
@@ -577,17 +586,16 @@ def bootstrap_synthetic_dataset(session):
 
 
 def init_database_from_csv():
-    """Initializes tables and seeds synthetic records if empty."""
+    """Initializes tables and seeds default records safely."""
     Base.metadata.create_all(bind=engine)
     session = SessionLocal()
     try:
+        # 1. Ensure default users exist
+        seed_default_users_safe(session)
+        
+        # 2. Ensure students & drives exist
         if session.query(StudentModel).count() == 0:
-            csv_path = os.path.join(DATA_DIR, "students.csv")
-            if os.path.exists(csv_path):
-                # Fallback to direct bootstrap
-                bootstrap_synthetic_dataset(session)
-            else:
-                bootstrap_synthetic_dataset(session)
+            bootstrap_synthetic_dataset(session)
     finally:
         session.close()
 
