@@ -60,3 +60,4 @@ pydantic
 reportlab
 Pillow
 openpyxl
+tabulate
