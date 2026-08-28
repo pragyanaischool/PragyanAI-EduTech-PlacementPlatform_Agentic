@@ -7,9 +7,10 @@ from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 # ----------------------------------------------------
 # 1. DATABASE CONFIGURATION & ENGINE
 # ----------------------------------------------------
-PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_DIR = os.path.join(PROJECT_ROOT, "database")
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
+
 os.makedirs(DB_DIR, exist_ok=True)
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -29,6 +30,7 @@ class StudentModel(Base):
     id = Column(String(20), primary_key=True, index=True)
     name = Column(String(100), nullable=False)
     dept = Column(String(20), nullable=False, index=True)
+    college = Column(String(100), default="Main Campus (Bengaluru)", index=True)
     grad_year = Column(Integer, nullable=False, index=True)
     cgpa = Column(Float, nullable=False, index=True)
     skills = Column(Text, nullable=False)
@@ -48,6 +50,7 @@ class StudentModel(Base):
     selections = relationship("DriveSelectionModel", back_populates="student", cascade="all, delete-orphan")
     experiences = relationship("InterviewExperienceModel", back_populates="student", cascade="all, delete-orphan")
 
+
 class CompanyModel(Base):
     __tablename__ = "companies"
 
@@ -58,6 +61,7 @@ class CompanyModel(Base):
     openings = Column(Integer, default=5)
 
     drives = relationship("DriveModel", back_populates="company_rel", cascade="all, delete-orphan")
+
 
 class DriveModel(Base):
     __tablename__ = "drives"
@@ -78,6 +82,7 @@ class DriveModel(Base):
     company_rel = relationship("CompanyModel", back_populates="drives")
     job_description = relationship("JobDescriptionModel", back_populates="drive_rel", uselist=False, cascade="all, delete-orphan")
 
+
 class JobDescriptionModel(Base):
     __tablename__ = "job_descriptions"
 
@@ -91,6 +96,7 @@ class JobDescriptionModel(Base):
     package_lpa = Column(Float, default=0.0)
 
     drive_rel = relationship("DriveModel", back_populates="job_description")
+
 
 class CandidateStageModel(Base):
     __tablename__ = "candidate_stages"
@@ -107,6 +113,7 @@ class CandidateStageModel(Base):
 
     student = relationship("StudentModel", back_populates="stages")
 
+
 class DriveSelectionModel(Base):
     __tablename__ = "drive_selections"
 
@@ -122,6 +129,7 @@ class DriveSelectionModel(Base):
     offered_ctc_lpa = Column(Float, default=0.0)
 
     student = relationship("StudentModel", back_populates="selections")
+
 
 class InterviewExperienceModel(Base):
     __tablename__ = "interview_experiences"
@@ -142,6 +150,7 @@ class InterviewExperienceModel(Base):
 
     student = relationship("StudentModel", back_populates="experiences")
 
+
 class TrainingSessionModel(Base):
     __tablename__ = "training_sessions"
 
@@ -158,6 +167,7 @@ class TrainingSessionModel(Base):
     meeting_link = Column(String(255), default="")
     resource_link = Column(String(255), default="")
 
+
 class RecruiterFeedbackModel(Base):
     __tablename__ = "recruiter_feedback"
 
@@ -170,6 +180,7 @@ class RecruiterFeedbackModel(Base):
     strong_areas = Column(Text, default="")
     observed_gaps = Column(Text, default="")
     recommended_curriculum_fixes = Column(Text, default="")
+
 
 # ----------------------------------------------------
 # 3. DB INITIALIZATION & AUTOMATIC CSV INGESTION
@@ -187,11 +198,18 @@ def init_database_from_csv():
                 df = pd.read_csv(csv_path)
                 for _, r in df.iterrows():
                     session.add(StudentModel(
-                        id=str(r["ID"]), name=str(r["Name"]), dept=str(r["Dept"]),
-                        grad_year=int(r["Grad_Year"]), cgpa=float(r["CGPA"]),
-                        skills=str(r["Skills"]), projects=str(r.get("Projects", "")),
-                        experience=str(r.get("Experience", "")), linkedin=str(r.get("Linkedin", "")),
-                        github=str(r.get("Github", "")), dream_roles=str(r.get("Dream_Roles", "")),
+                        id=str(r["ID"]),
+                        name=str(r["Name"]),
+                        dept=str(r["Dept"]),
+                        college=str(r.get("College", "Main Campus (Bengaluru)")),
+                        grad_year=int(r["Grad_Year"]),
+                        cgpa=float(r["CGPA"]),
+                        skills=str(r["Skills"]),
+                        projects=str(r.get("Projects", "")),
+                        experience=str(r.get("Experience", "")),
+                        linkedin=str(r.get("Linkedin", "")),
+                        github=str(r.get("Github", "")),
+                        dream_roles=str(r.get("Dream_Roles", "")),
                         dream_companies=str(r.get("Dream_Companies", "")),
                         salary_expected_lpa=float(r.get("Salary_Expected_LPA", 0.0)),
                         status=str(r.get("Status", "Not Placed")),
@@ -208,8 +226,10 @@ def init_database_from_csv():
                 df = pd.read_csv(csv_path)
                 for _, r in df.iterrows():
                     session.add(CompanyModel(
-                        company=str(r["Company"]), domain=str(r.get("Domain", "General")),
-                        email=str(r["Email"]), status=str(r.get("Status", "Approved")),
+                        company=str(r["Company"]),
+                        domain=str(r.get("Domain", "General Technology")),
+                        email=str(r["Email"]),
+                        status=str(r.get("Status", "Approved")),
                         openings=int(r.get("Openings", 5))
                     ))
                 session.commit()
@@ -221,12 +241,18 @@ def init_database_from_csv():
                 df = pd.read_csv(csv_path)
                 for _, r in df.iterrows():
                     session.add(DriveModel(
-                        drive_id=str(r["Drive_ID"]), company=str(r["Company"]),
-                        role=str(r["Role"]), min_cgpa=float(r.get("Min_CGPA", 0.0)),
-                        eligible_depts=str(r["Eligible_Depts"]), required_skills=str(r["Required_Skills"]),
-                        description=str(r.get("Description", "")), package_lpa=float(r.get("Package_LPA", 0.0)),
-                        session_date=str(r["Session_Date"]), app_link=str(r.get("App_Link", "")),
-                        seminar_link=str(r.get("Seminar_Link", "")), ppt_link=str(r.get("PPT_Link", ""))
+                        drive_id=str(r["Drive_ID"]),
+                        company=str(r["Company"]),
+                        role=str(r["Role"]),
+                        min_cgpa=float(r.get("Min_CGPA", 0.0)),
+                        eligible_depts=str(r["Eligible_Depts"]),
+                        required_skills=str(r["Required_Skills"]),
+                        description=str(r.get("Description", "")),
+                        package_lpa=float(r.get("Package_LPA", 0.0)),
+                        session_date=str(r["Session_Date"]),
+                        app_link=str(r.get("App_Link", "")),
+                        seminar_link=str(r.get("Seminar_Link", "")),
+                        ppt_link=str(r.get("PPT_Link", ""))
                     ))
                 session.commit()
 
@@ -237,8 +263,10 @@ def init_database_from_csv():
                 df = pd.read_csv(csv_path)
                 for _, r in df.iterrows():
                     session.add(JobDescriptionModel(
-                        jd_id=str(r["JD_ID"]), drive_id=str(r["Drive_ID"]),
-                        company=str(r["Company"]), role=str(r["Role"]),
+                        jd_id=str(r["JD_ID"]),
+                        drive_id=str(r["Drive_ID"]),
+                        company=str(r["Company"]),
+                        role=str(r["Role"]),
                         target_domain=str(r.get("Target_Domain", "")),
                         full_jd_text=str(r["Full_JD_Text"]),
                         min_experience_months=int(r.get("Min_Experience_Months", 0)),
@@ -253,9 +281,12 @@ def init_database_from_csv():
                 df = pd.read_csv(csv_path)
                 for _, r in df.iterrows():
                     session.add(CandidateStageModel(
-                        stage_id=str(r["Stage_ID"]), student_id=str(r["Student_ID"]),
-                        student_name=str(r["Student_Name"]), dept=str(r["Dept"]),
-                        company=str(r["Company"]), role=str(r["Role"]),
+                        stage_id=str(r["Stage_ID"]),
+                        student_id=str(r["Student_ID"]),
+                        student_name=str(r["Student_Name"]),
+                        dept=str(r["Dept"]),
+                        company=str(r["Company"]),
+                        role=str(r["Role"]),
                         current_round=str(r["Current_Round"]),
                         next_round_date=str(r.get("Next_Round_Date", "TBD")),
                         mode_location=str(r.get("Mode_Location", "Virtual"))
@@ -269,9 +300,12 @@ def init_database_from_csv():
                 df = pd.read_csv(csv_path)
                 for _, r in df.iterrows():
                     session.add(DriveSelectionModel(
-                        drive_id=str(r["Drive_ID"]), company=str(r["Company"]),
-                        student_id=str(r["Student_ID"]), student_name=str(r["Student_Name"]),
-                        dept=str(r["Dept"]), attended=bool(r.get("Attended", False)),
+                        drive_id=str(r["Drive_ID"]),
+                        company=str(r["Company"]),
+                        student_id=str(r["Student_ID"]),
+                        student_name=str(r["Student_Name"]),
+                        dept=str(r["Dept"]),
+                        attended=bool(r.get("Attended", False)),
                         selection_status=str(r.get("Selection_Status", "In Progress")),
                         offered_role=str(r.get("Offered_Role", "None")),
                         offered_ctc_lpa=float(r.get("Offered_CTC_LPA", 0.0))
@@ -285,9 +319,12 @@ def init_database_from_csv():
                 df = pd.read_csv(csv_path)
                 for _, r in df.iterrows():
                     session.add(InterviewExperienceModel(
-                        exp_id=str(r["Exp_ID"]), student_id=str(r["Student_ID"]),
-                        student_name=str(r["Student_Name"]), dept=str(r["Dept"]),
-                        company=str(r["Company"]), role=str(r["Role"]),
+                        exp_id=str(r["Exp_ID"]),
+                        student_id=str(r["Student_ID"]),
+                        student_name=str(r["Student_Name"]),
+                        dept=str(r["Dept"]),
+                        company=str(r["Company"]),
+                        role=str(r["Role"]),
                         rounds_faced=str(r["Rounds_Faced"]),
                         skills_excelled=str(r.get("Skills_Excelled", "")),
                         challenges_faced=str(r.get("Challenges_Faced", "")),
@@ -305,12 +342,18 @@ def init_database_from_csv():
                 df = pd.read_csv(csv_path)
                 for _, r in df.iterrows():
                     session.add(TrainingSessionModel(
-                        session_id=str(r["Session_ID"]), type=str(r["Type"]),
-                        title=str(r["Title"]), target_depts=str(r["Target_Depts"]),
-                        instructor=str(r["Instructor"]), schedule_date=str(r["Schedule_Date"]),
-                        timing=str(r.get("Timing", "")), mode=str(r.get("Mode", "Hybrid")),
-                        location=str(r.get("Location", "")), curriculum=str(r.get("Curriculum", "")),
-                        meeting_link=str(r.get("Meeting_Link", "")), resource_link=str(r.get("Resource_Link", ""))
+                        session_id=str(r["Session_ID"]),
+                        type=str(r["Type"]),
+                        title=str(r["Title"]),
+                        target_depts=str(r["Target_Depts"]),
+                        instructor=str(r["Instructor"]),
+                        schedule_date=str(r["Schedule_Date"]),
+                        timing=str(r.get("Timing", "10:00 AM - 01:00 PM")),
+                        mode=str(r.get("Mode", "Hybrid")),
+                        location=str(r.get("Location", "Pragyan Lab")),
+                        curriculum=str(r.get("Curriculum", "")),
+                        meeting_link=str(r.get("Meeting_Link", "")),
+                        resource_link=str(r.get("Resource_Link", ""))
                     ))
                 session.commit()
 
@@ -321,7 +364,8 @@ def init_database_from_csv():
                 df = pd.read_csv(csv_path)
                 for _, r in df.iterrows():
                     session.add(RecruiterFeedbackModel(
-                        company=str(r["Company"]), drive_id=str(r.get("Drive_ID", "N/A")),
+                        company=str(r["Company"]),
+                        drive_id=str(r.get("Drive_ID", "N/A")),
                         evaluator=str(r.get("Evaluator", "Lead Recruiter")),
                         dept_evaluated=str(r["Dept_Evaluated"]),
                         overall_rating=float(r.get("Overall_Rating", 4.0)),
@@ -334,11 +378,14 @@ def init_database_from_csv():
     finally:
         session.close()
 
+
 # ----------------------------------------------------
 # 4. HIGH-PERFORMANCE QUERY & CRUD METHODS
 # ----------------------------------------------------
 def get_db_session():
+    """Provides a thread-safe database session."""
     return SessionLocal()
+
 
 def fetch_table_as_df(model_class) -> pd.DataFrame:
     """Reads any table directly into a clean Pandas DataFrame for analytics/pivots."""
@@ -350,7 +397,9 @@ def fetch_table_as_df(model_class) -> pd.DataFrame:
     finally:
         session.close()
 
+
 def db_add_or_update_student(student_dict: dict):
+    """Inserts or updates a student record safely."""
     session = SessionLocal()
     try:
         existing = session.query(StudentModel).filter(StudentModel.id == student_dict["id"]).first()
@@ -360,10 +409,15 @@ def db_add_or_update_student(student_dict: dict):
         else:
             session.add(StudentModel(**student_dict))
         session.commit()
+    except Exception as e:
+        session.rollback()
+        raise e
     finally:
         session.close()
 
+
 def db_add_drive(drive_dict: dict, jd_text: str = None):
+    """Inserts a new drive and associated job description record atomically."""
     session = SessionLocal()
     try:
         drive_obj = DriveModel(**drive_dict)
@@ -376,17 +430,75 @@ def db_add_drive(drive_dict: dict, jd_text: str = None):
                 role=drive_dict["role"],
                 target_domain="Enterprise Track",
                 full_jd_text=jd_text,
-                package_lpa=drive_dict["package_lpa"]
+                package_lpa=drive_dict.get("package_lpa", 0.0)
             )
             session.add(jd_obj)
         session.commit()
+    except Exception as e:
+        session.rollback()
+        raise e
     finally:
         session.close()
 
+
 def db_add_interview_experience(exp_dict: dict):
+    """Inserts candidate multimedia debrief record."""
     session = SessionLocal()
     try:
         session.add(InterviewExperienceModel(**exp_dict))
         session.commit()
+    except Exception as e:
+        session.rollback()
+        raise e
+    finally:
+        session.close()
+
+
+def db_add_company(company_dict: dict):
+    """Registers a hiring partner for approval."""
+    session = SessionLocal()
+    try:
+        session.add(CompanyModel(**company_dict))
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        raise e
+    finally:
+        session.close()
+
+
+def db_update_company_status(company_name: str, new_status: str = "Approved"):
+    """Approves or rejects a company partner account."""
+    session = SessionLocal()
+    try:
+        comp = session.query(CompanyModel).filter(CompanyModel.company == company_name).first()
+        if comp:
+            comp.status = new_status
+            session.commit()
+    except Exception as e:
+        session.rollback()
+        raise e
+    finally:
+        session.close()
+
+
+def db_update_candidate_stage(stage_dict: dict):
+    """Upserts a candidate recruitment stage progression."""
+    session = SessionLocal()
+    try:
+        existing = session.query(CandidateStageModel).filter(
+            CandidateStageModel.student_id == stage_dict["student_id"],
+            CandidateStageModel.company == stage_dict["company"]
+        ).first()
+
+        if existing:
+            for k, v in stage_dict.items():
+                setattr(existing, k, v)
+        else:
+            session.add(CandidateStageModel(**stage_dict))
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        raise e
     finally:
         session.close()
