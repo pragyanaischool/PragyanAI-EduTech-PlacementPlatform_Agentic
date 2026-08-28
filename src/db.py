@@ -1,19 +1,31 @@
 import streamlit as st
 import pandas as pd
 from src.database import (
-    init_database_from_csv, fetch_table_as_df,
-    StudentModel, CompanyModel, DriveModel, JobDescriptionModel,
-    CandidateStageModel, DriveSelectionModel, InterviewExperienceModel,
-    TrainingSessionModel, RecruiterFeedbackModel
+    init_database_from_csv,
+    fetch_table_as_df,
+    StudentModel,
+    CompanyModel,
+    DriveModel,
+    JobDescriptionModel,
+    CandidateStageModel,
+    DriveSelectionModel,
+    InterviewExperienceModel,
+    TrainingSessionModel,
+    RecruiterFeedbackModel
 )
 
+
 def init_db():
-    # 1. Initialize SQLite Tables & Seed from CSV if empty
+    """
+    Synchronizes SQLite database with Streamlit's session state.
+    Executes schema initialization on startup and pulls live DataFrames for rapid querying.
+    """
+    # 1. Initialize SQLite Database Schema & Ingest CSV seeds if empty
     init_database_from_csv()
 
-    # 2. Sync Database Tables to Session State for Rapid Querying
+    # 2. Sync all tables into Streamlit session state
     st.session_state.students = fetch_table_as_df(StudentModel).rename(columns={
-        "id": "ID", "name": "Name", "dept": "Dept", "grad_year": "Grad_Year",
+        "id": "ID", "name": "Name", "dept": "Dept", "college": "College", "grad_year": "Grad_Year",
         "cgpa": "CGPA", "skills": "Skills", "projects": "Projects", "experience": "Experience",
         "linkedin": "Linkedin", "github": "Github", "dream_roles": "Dream_Roles",
         "dream_companies": "Dream_Companies", "salary_expected_lpa": "Salary_Expected_LPA",
@@ -76,8 +88,4 @@ def init_db():
         "strong_areas": "Strong_Areas", "observed_gaps": "Observed_Gaps",
         "recommended_curriculum_fixes": "Recommended_Curriculum_Fixes"
     })
-
-    if "chat_messages" not in st.session_state:
-        st.session_state.chat_messages = [
-            {"role": "assistant", "content": "👋 Hello! I am your **PragyanAI Placement Copilot**, connected to the institutional database. Ask me about candidate pipeline stages, selection criteria, or company interview schedules."}
-        ]
+    
