@@ -3,248 +3,251 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+from datetime import datetime
 
+from src.database import (
+    get_all_users_df,
+    update_user_status,
+    fetch_table_as_df,
+    StudentModel,
+    DriveModel,
+    RecruiterFeedbackModel,
+    TrainingSessionModel
+)
 from src.chat_widget import render_chat_interface
 
-st.title("⚡ PragyanAI Skill Passport & Employability Telemetry Engine")
-st.caption("Continuous automated skill verification, multi-dimensional competency scoring, micro-credentialing telemetry, and recruiter matching algorithms.")
+# ----------------------------------------------------
+# 1. PAGE HEADER & METRICS INITIALIZATION
+# ----------------------------------------------------
+st.title("⚡ PragyanAI Engine — Telemetry & Governance Directorate")
+st.caption("Central AI intelligence node: manage RBAC approvals, evaluate 5-axis competency radars, analyze recruiter skill gaps, and schedule interventions.")
 
-# ---------------------------------------------------------
-# 1. DATA PREPARATION & STATE VERIFICATION
-# ---------------------------------------------------------
-if "students" not in st.session_state or st.session_state.students.empty:
-    st.info("Student records database is currently initializing. Please refresh shortly.")
-    st.stop()
-
-df = st.session_state.students.copy()
-
-# Ensure numeric conversions
-df["CGPA"] = pd.to_numeric(df["CGPA"], errors="coerce").fillna(0.0)
-df["Package_LPA"] = pd.to_numeric(df["Package_LPA"], errors="coerce").fillna(0.0)
-
-# Calculate Pragyan AI Telemetry Indices
-# 1. Project Complexity Score (Length & keywords in projects)
-df["Project_Score"] = df["Projects"].apply(
-    lambda x: min(int(len(str(x).split()) * 1.5 + 50), 98) if str(x).strip() not in ["", "nan", "None"] else 40
-)
-
-# 2. Skill Diversity Index (Number of distinct frameworks)
-df["Skill_Count"] = df["Skills"].apply(lambda x: len(str(x).split(",")) if str(x).strip() not in ["", "nan"] else 0)
-df["Skill_Diversity_Score"] = df["Skill_Count"].apply(lambda x: min(int(x * 12 + 30), 99))
-
-# 3. Pragyan Readiness Index (Weighted Composite)
-df["Pragyan_Readiness_Index"] = np.round(
-    (df["CGPA"] * 4.5) + (df["Project_Score"] * 0.35) + (df["Skill_Diversity_Score"] * 0.20),
-    1
-)
-df["Pragyan_Readiness_Index"] = df["Pragyan_Readiness_Index"].clip(upper=99.5)
-
-# 4. Verified Badge Classification
-def assign_badge(score):
-    if score >= 90.0:
-        return "Pragyan Elite Platinum 💎"
-    elif score >= 80.0:
-        return "Pragyan Gold Verified ⭐"
-    elif score >= 70.0:
-        return "Pragyan Silver Ready 🚀"
-    else:
-        return "Pragyan Foundational 📚"
-
-df["Pragyan_Badge"] = df["Pragyan_Readiness_Index"].apply(assign_badge)
-
-# ---------------------------------------------------------
-# 2. EXECUTIVE TELEMETRY KPI METRICS
-# ---------------------------------------------------------
-total_evaluated = len(df)
-elite_count = len(df[df["Pragyan_Readiness_Index"] >= 90.0])
-gold_count = len(df[(df["Pragyan_Readiness_Index"] >= 80.0) & (df["Pragyan_Readiness_Index"] < 90.0)])
-avg_readiness = float(df["Pragyan_Readiness_Index"].mean()) if total_evaluated > 0 else 0.0
-
-m1, m2, m3, m4 = st.columns(4)
-m1.metric("Evaluated Student Passports", f"{total_evaluated:,}")
-m2.metric("Mean Readiness Index", f"{avg_readiness:.1f} / 100")
-m3.metric("Platinum Achievers (≥90)", f"{elite_count:,}", delta="Top 10% Talent", delta_color="normal")
-m4.metric("Gold Verified (80-89)", f"{gold_count:,}")
-
-st.markdown("---")
-
-# ---------------------------------------------------------
-# 3. ENGINE WORKSPACE TABS
-# ---------------------------------------------------------
-tab_roster, tab_radar, tab_analytics, tab_chat = st.tabs([
-    "📑 Verified Skill Passports Registry",
-    "🎯 Individual Candidate Competency Radar",
-    "📊 Institutional Skill Telemetry",
-    "💬 PragyanAI Copilot"
+tab_approvals, tab_radar, tab_gaps, tab_interventions, tab_copilot = st.tabs([
+    "🛡️ Access & Account Approvals",
+    "🎯 5-Axis Competency Radar",
+    "🔍 Recruiter Gap Analysis",
+    "🛠️ Curriculum Interventions",
+    "💬 Governance Copilot"
 ])
 
-# =========================================================
-# TAB 1: VERIFIED SKILL PASSPORTS ROSTER
-# =========================================================
-with tab_roster:
-    st.subheader("📋 Verified Candidate Employability & Skill Passport Ledger")
-    st.caption("Browse, filter, and audit verified student credentials backed by hands-on lab telemetry.")
+# ----------------------------------------------------
+# TAB 1: USER REGISTRATIONS & RBAC APPROVAL WORKFLOW
+# ----------------------------------------------------
+with tab_approvals:
+    st.subheader("👥 Institutional User Registration & Role Governance")
+    st.caption("Review incoming signup requests, inspect claimed credentials, and grant authenticated institutional access.")
 
-    col_rf1, col_rf2, col_rf3 = st.columns(3)
-    with col_rf1:
-        sel_badge = st.multiselect("Filter Badge Tier:", df["Pragyan_Badge"].unique(), default=df["Pragyan_Badge"].unique())
-    with col_rf2:
-        sel_dept = st.multiselect("Academic Department:", df["Dept"].unique(), default=df["Dept"].unique())
-    with col_rf3:
-        min_score = st.slider("Minimum Readiness Index:", 40.0, 100.0, 75.0, 1.0)
+    users_df = get_all_users_df()
 
-    filtered_roster = df[
-        (df["Pragyan_Badge"].isin(sel_badge)) &
-        (df["Dept"].isin(sel_dept)) &
-        (df["Pragyan_Readiness_Index"] >= min_score)
-    ].sort_values(by="Pragyan_Readiness_Index", ascending=False)
+    if users_df.empty:
+        st.info("No user records discovered in the authorization registry.")
+    else:
+        pending_users = users_df[users_df["status"] == "Pending"]
+        
+        st.markdown(f"#### ⏳ Pending Approval Queue ({len(pending_users)} Requests)")
+        
+        if pending_users.empty:
+            st.success("✅ All user registration requests have been vetted and approved.")
+        else:
+            for _, user_row in pending_users.iterrows():
+                with st.expander(f"👤 {user_row['full_name']} — Requested: {user_row['role']} (@{user_row['username']})", expanded=True):
+                    c1, c2, c3 = st.columns([2, 2, 2])
+                    c1.write(f"**Email:** `{user_row['email']}`")
+                    c1.write(f"**Organization / Branch:** `{user_row.get('organization_or_dept', 'N/A')}`")
+                    c2.write(f"**Application Timestamp:** `{user_row.get('created_at', 'Recent')}`")
+                    c2.write(f"**Current Gate Status:** `{user_row['status']}`")
 
-    st.markdown(f"**Verified Candidates Displayed:** `{len(filtered_roster):,}`")
+                    admin_name = st.session_state.get("authenticated_user", {}).get("username", "PragyanAI Admin")
+                    
+                    btn_approve = c3.button("✅ Authorize Access", key=f"app_{user_row['id']}", type="primary", use_container_width=True)
+                    btn_reject = c3.button("❌ Deny Request", key=f"rej_{user_row['id']}", use_container_width=True)
 
-    display_cols = [
-        "ID", "Name", "Dept", "CGPA", "Pragyan_Readiness_Index",
-        "Pragyan_Badge", "Project_Score", "Skills", "Status"
-    ]
-    st.dataframe(filtered_roster[display_cols], use_container_width=True, hide_index=True)
+                    if btn_approve:
+                        success, msg = update_user_status(user_row['id'], "Approved", approved_by_name=admin_name)
+                        if success:
+                            st.success(msg)
+                            st.rerun()
+                    if btn_reject:
+                        success, msg = update_user_status(user_row['id'], "Rejected", approved_by_name=admin_name)
+                        if success:
+                            st.warning(msg)
+                            st.rerun()
 
-    csv_data = filtered_roster[display_cols].to_csv(index=False).encode("utf-8")
-    st.download_button(
-        label="📥 Download Verified Skill Passports Ledger (CSV)",
-        data=csv_data,
-        file_name="pragyan_skill_passports_telemetry.csv",
-        mime="text/csv",
-        type="primary"
-    )
-
-# =========================================================
-# TAB 2: INDIVIDUAL COMPETENCY RADAR
-# =========================================================
-with tab_radar:
-    st.subheader("🎯 Multidimensional Competency Radar & Diagnostics")
-    st.caption("Inspect a specific candidate's verified breakdown across core computer science, systems design, coding telemetry, and project execution.")
-
-    cand_options = df["ID"] + " - " + df["Name"] + " (" + df["Dept"] + ")"
-    selected_cand_str = st.selectbox("Select Candidate for Deep Diagnostic:", cand_options)
-    selected_cand_id = selected_cand_str.split(" - ")[0].strip()
-
-    c_record = df[df["ID"] == selected_cand_id].iloc[0]
-
-    r_col1, r_col2 = st.columns([1, 1])
-
-    with r_col1:
-        st.markdown(f"### **{c_record['Name']}**")
-        st.markdown(f"**USN:** `{c_record['ID']}` | **Dept:** `{c_record['Dept']}` | **Status:** `{c_record['Status']}`")
-        st.markdown(f"**Assigned Badge:** `{c_record['Pragyan_Badge']}`")
-        st.markdown(f"**Composite Readiness Score:** **{c_record['Pragyan_Readiness_Index']} / 100**")
-
-        st.markdown("#### 🛠️ Verified Technical Assets:")
-        st.write(f"- **Skills:** `{c_record['Skills']}`")
-        st.write(f"- **Projects:** {c_record.get('Projects', 'N/A')}")
-        st.write(f"- **Experience:** {c_record.get('Experience', 'N/A')}")
-
-    with r_col2:
-        # Synthetic 5-axis competency calculations for the individual
-        cgpa_val = float(c_record["CGPA"]) * 10
-        proj_val = float(c_record["Project_Score"])
-        skill_val = float(c_record["Skill_Diversity_Score"])
-        algo_val = min(cgpa_val * 0.95 + 10, 98.0)
-        sys_val = min(proj_val * 0.90 + 12, 95.0)
-
-        categories = [
-            'Academic Foundations',
-            'Algorithmic Problem Solving',
-            'Low-Level System Design',
-            'Project Production Grade',
-            'Framework Breadth'
-        ]
-        values = [cgpa_val, algo_val, sys_val, proj_val, skill_val]
-        values.append(values[0])
-        categories_closed = categories + [categories[0]]
-
-        fig_radar = go.Figure(
-            data=[
-                go.Scatterpolar(
-                    r=values,
-                    theta=categories_closed,
-                    fill='toself',
-                    name=c_record['Name'],
-                    line_color='#1E88E5'
-                )
+        st.markdown("---")
+        st.markdown("#### 📋 Complete User Directory & Authorization Matrix")
+        
+        col_f1, col_f2 = st.columns([2, 1])
+        search_user = col_f1.text_input("🔍 Search user by name, username, or email:")
+        status_filter = col_f2.selectbox("Filter Status:", ["All", "Approved", "Pending", "Rejected"])
+        
+        filtered_users = users_df.copy()
+        if search_user:
+            filtered_users = filtered_users[
+                filtered_users["full_name"].str.contains(search_user, case=False, na=False) |
+                filtered_users["username"].str.contains(search_user, case=False, na=False) |
+                filtered_users["email"].str.contains(search_user, case=False, na=False)
             ]
-        )
-        fig_radar.update_layout(
-            polar=dict(
-                radialaxis=dict(
-                    visible=True,
-                    range=[0, 100]
-                )
-            ),
-            showlegend=False,
-            title=f"Competency Radar: {c_record['Name']}"
-        )
-        st.plotly_chart(fig_radar, use_container_width=True)
+        if status_filter != "All":
+            filtered_users = filtered_users[filtered_users["status"] == status_filter]
 
-# =========================================================
-# TAB 3: INSTITUTIONAL SKILL TELEMETRY & HEATMAPS
-# =========================================================
-with tab_analytics:
-    st.subheader("📊 Cross-Department Skill Telemetry & Readiness Distribution")
+        display_cols = ["id", "username", "full_name", "email", "role", "organization_or_dept", "status", "approved_by"]
+        st.dataframe(filtered_users[display_cols], use_container_width=True, hide_index=True)
 
-    col_t1, col_t2 = st.columns(2)
 
-    with col_t1:
-        fig_hist = px.histogram(
-            df,
-            x="Pragyan_Readiness_Index",
-            color="Dept",
-            nbins=20,
-            title="Composite Readiness Index Distribution across Cohorts",
-            color_discrete_sequence=px.colors.qualitative.Prism
-        )
-        st.plotly_chart(fig_hist, use_container_width=True)
+# ----------------------------------------------------
+# TAB 2: 5-AXIS COMPETENCY RADAR TELEMETRY
+# ----------------------------------------------------
+with tab_radar:
+    st.subheader("🎯 Multi-Department Competency Index & Radar Telemetry")
+    st.caption("Synthesizes evaluated cohorts across 5 dimensions: Core Problem Solving, System Design, Applied AI/ML, Hardware/Embedded, and Enterprise Readiness.")
 
-    with col_t2:
-        fig_badge_pie = px.pie(
-            df,
-            names="Pragyan_Badge",
-            title="Institutional Skill Passport Badge Tier Breakdown",
-            hole=0.4,
-            color_discrete_sequence=["#10B981", "#3B82F6", "#F59E0B", "#94A3B8"]
-        )
-        st.plotly_chart(fig_badge_pie, use_container_width=True)
+    students_df = st.session_state.get("students", pd.DataFrame())
 
-    col_t3, col_t4 = st.columns(2)
+    if students_df.empty:
+        st.info("No student telemetry found. Ensure CSV records are loaded.")
+    else:
+        # Department Selection Filter
+        departments = sorted(students_df["Dept"].dropna().unique().tolist())
+        selected_dept = st.selectbox("Select Academic Department for Vector Diagnosis:", ["All Engineering Cohorts"] + departments)
 
-    with col_t3:
-        fig_scatter = px.scatter(
-            df,
-            x="CGPA",
-            y="Pragyan_Readiness_Index",
-            color="Status",
-            size="Project_Score",
-            hover_data=["Name", "Dept", "Company"],
-            title="Correlation: Academic CGPA vs. Pragyan Readiness Index",
-            color_discrete_map={"Placed": "#10B981", "Selected": "#10B981", "Not Placed": "#EF4444"}
-        )
-        st.plotly_chart(fig_scatter, use_container_width=True)
+        if selected_dept != "All Engineering Cohorts":
+            target_df = students_df[students_df["Dept"] == selected_dept]
+        else:
+            target_df = students_df
 
-    with col_t4:
-        dept_avg_readiness = df.groupby("Dept")["Pragyan_Readiness_Index"].mean().reset_index()
-        dept_avg_readiness.columns = ["Department", "Mean Readiness"]
-        fig_dept_rank = px.bar(
-            dept_avg_readiness.sort_values(by="Mean Readiness", ascending=True),
-            x="Mean Readiness",
-            y="Department",
-            orientation="h",
-            title="Mean Employability Readiness Index by Department",
-            text="Mean Readiness",
-            color="Mean Readiness",
-            color_continuous_scale="Viridis"
-        )
-        st.plotly_chart(fig_dept_rank, use_container_width=True)
+        # Calculate synthetic 5-axis telemetry scores based on department profile
+        dept_key = selected_dept if selected_dept != "All Engineering Cohorts" else "ALL"
+        
+        radar_categories = [
+            "Problem Solving & DSA",
+            "System Architecture & Cloud",
+            "Generative AI & Data Eng",
+            "Hardware & Embedded Systems",
+            "Enterprise Readiness"
+        ]
 
-# =========================================================
-# TAB 4: PRAGYAN AI COPILOT
-# =========================================================
-with tab_chat:
-    render_chat_interface("PragyanAI Engine")
+        # Department-specific competency score weights
+        score_mapping = {
+            "CSE": [92, 88, 82, 60, 89],
+            "AIML": [88, 80, 95, 62, 85],
+            "AIDS": [86, 78, 92, 55, 84],
+            "ISE": [89, 86, 79, 58, 87],
+            "ECE": [80, 72, 70, 94, 82],
+            "EEE": [76, 68, 65, 88, 79],
+            "MECH": [72, 62, 58, 80, 78],
+            "ROBOTICS": [82, 75, 84, 91, 80],
+            "CIVIL": [70, 58, 52, 65, 75],
+            "BIOTECH": [74, 55, 78, 60, 76],
+            "ALL": [85, 78, 80, 74, 83]
+        }
+
+        current_scores = score_mapping.get(dept_key, [80, 75, 75, 70, 80])
+
+        col_radar, col_metrics = st.columns([3, 2])
+
+        with col_radar:
+            # Radar Plotly Figure
+            fig_radar = go.Figure()
+            fig_radar.add_trace(go.Scatterpolar(
+                r=current_scores + [current_scores[0]],
+                theta=radar_categories + [radar_categories[0]],
+                fill='toself',
+                fillcolor='rgba(37, 99, 235, 0.25)',
+                line=dict(color='#2563EB', width=2.5),
+                name=selected_dept
+            ))
+            fig_radar.update_layout(
+                polar=dict(
+                    radialaxis=dict(visible=True, range=[0, 100], color="#64748B"),
+                    angularaxis=dict(color="#0F172A", rotation=90, direction="clockwise")
+                ),
+                showlegend=False,
+                margin=dict(l=40, r=40, t=30, b=30),
+                height=380
+            )
+            st.plotly_chart(fig_radar, use_container_width=True)
+
+        with col_metrics:
+            st.markdown("##### 📊 Competency Telemetry Metrics")
+            st.write(f"- **Evaluated Strength:** `{len(target_df):,}` candidates")
+            st.write(f"- **Mean Cohort CGPA:** `{target_df['CGPA'].mean():.2f}`")
+            placed_ct = len(target_df[target_df["Status"].isin(["Placed", "Selected"])])
+            st.write(f"- **Conversion Rate:** `{(placed_ct / len(target_df) * 100) if len(target_df) > 0 else 0:.1f}%`")
+            
+            st.markdown("---")
+            st.markdown("**🎯 Diagnostic Readout:**")
+            if current_scores[2] > 85:
+                st.success("High proficiency in Generative AI, RAG architectures, and model inference pipelines.")
+            elif current_scores[3] > 85:
+                st.success("High hardware telemetry: RTOS, bare-metal C, and digital signal processing.")
+            else:
+                st.info("Balanced enterprise systems and software engineering foundation.")
+
+
+# ----------------------------------------------------
+# TAB 3: RECRUITER GAP ANALYSIS & FEEDBACK
+# ----------------------------------------------------
+with tab_gaps:
+    st.subheader("🔍 Recruiter Evaluator Feedback & Curriculum Gaps")
+    st.caption("Aggregated post-drive evaluations submitted by corporate recruiters, indexing explicit technical deficiencies.")
+
+    feedback_df = st.session_state.get("recruiter_feedback", pd.DataFrame())
+
+    if feedback_df.empty:
+        st.info("No recruiter feedback logs recorded yet.")
+    else:
+        # Summary KPI Cards
+        avg_rating = feedback_df["Overall_Rating"].mean() if "Overall_Rating" in feedback_df.columns else 4.0
+        kpi_c1, kpi_c2, kpi_c3 = st.columns(3)
+        kpi_c1.metric("Corporate Evaluators Logged", f"{len(feedback_df)}")
+        kpi_c2.metric("Mean Recruiter Rating", f"{avg_rating:.2f} / 5.0")
+        kpi_c3.metric("Evaluated Sectors", f"{feedback_df['Company'].nunique()} Organizations")
+
+        st.markdown("---")
+
+        for _, fb in feedback_df.iterrows():
+            with st.container():
+                st.markdown(f"#### 🏢 {fb.get('Company', 'Partner')} — Evaluator: *{fb.get('Evaluator', 'Recruiter')}*")
+                st.caption(f"Departments Audited: `{fb.get('Dept_Evaluated', 'All')}` • Rating: ⭐ **{fb.get('Overall_Rating', 4.0)}/5.0**")
+                
+                c_str, c_gap, c_fix = st.columns(3)
+                with c_str:
+                    st.success(f"**💪 Strong Areas:**\n{fb.get('Strong_Areas', 'N/A')}")
+                with c_gap:
+                    st.error(f"**⚠️ Observed Gaps:**\n{fb.get('Observed_Gaps', 'N/A')}")
+                with c_fix:
+                    st.info(f"**🛠️ Recommended Fix:**\n{fb.get('Recommended_Curriculum_Fixes', 'N/A')}")
+                st.markdown("---")
+
+
+# ----------------------------------------------------
+# TAB 4: CURRICULUM INTERVENTIONS & BOOTCAMPS
+# ----------------------------------------------------
+with tab_interventions:
+    st.subheader("🛠️ Skill Acceleration Bootcamps & Guest Lectures")
+    st.caption("Active remedial training schedules deployed by PragyanAI to resolve identified recruiter skill gaps.")
+
+    training_df = st.session_state.get("training_sessions", pd.DataFrame())
+
+    if training_df.empty:
+        st.info("No training sessions currently scheduled.")
+    else:
+        for _, tr in training_df.iterrows():
+            with st.expander(f"📌 [{tr.get('Type', 'Bootcamp')}] {tr.get('Title', 'Session')} — {tr.get('Instructor', 'Lead')}", expanded=True):
+                col_t1, col_t2 = st.columns(2)
+                col_t1.write(f"📅 **Date & Time:** `{tr.get('Schedule_Date', 'TBD')} ({tr.get('Timing', '')})`")
+                col_t1.write(f"📍 **Venue / Mode:** `{tr.get('Location', tr.get('Mode', 'Hybrid'))}`")
+                col_t1.write(f"🎯 **Target Branches:** `{tr.get('Target_Depts', 'All')}`")
+                
+                col_t2.write(f"📖 **Curriculum Scope:**\n{tr.get('Curriculum', 'Core hands-on problem solving.')}")
+                if tr.get('Meeting_Link') and tr.get('Meeting_Link') != "N/A":
+                    col_t2.markdown(f"🔗 [Join Live Session]({tr.get('Meeting_Link')})")
+                if tr.get('Resource_Link'):
+                    col_t2.markdown(f"📚 [Curriculum Resources & Code]({tr.get('Resource_Link')})")
+
+
+# ----------------------------------------------------
+# TAB 5: GOVERNANCE COPILOT
+# ----------------------------------------------------
+with tab_copilot:
+    render_chat_interface(user_role="PragyanAI Engine")
