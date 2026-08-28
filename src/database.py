@@ -1,11 +1,12 @@
 import os
+import hashlib
 import pandas as pd
 from datetime import datetime
-from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, Text, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, Text, ForeignKey, DateTime
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
 # ----------------------------------------------------
-# 1. DATABASE CONFIGURATION & ENGINE
+# 1. DATABASE CONFIGURATION & ENGINE INITIALIZATION
 # ----------------------------------------------------
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_DIR = os.path.join(PROJECT_ROOT, "database")
@@ -21,9 +22,30 @@ engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False}, 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+
+def hash_password(password: str) -> str:
+    """Computes a SHA-256 hash for secure credential persistence."""
+    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+
+
 # ----------------------------------------------------
 # 2. RELATIONAL ORM SCHEMAS
 # ----------------------------------------------------
+class UserModel(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String(80), unique=True, nullable=False, index=True)
+    email = Column(String(120), unique=True, nullable=False, index=True)
+    password_hash = Column(String(64), nullable=False)
+    full_name = Column(String(120), nullable=False)
+    role = Column(String(50), nullable=False, index=True)  # Student, Placement Head, Placement Team, Hiring Partner, HOD / Principal / Management, PragyanAI Engine
+    organization_or_dept = Column(String(120), default="")
+    status = Column(String(20), default="Pending", index=True)  # Pending, Approved, Rejected
+    created_at = Column(DateTime, default=datetime.utcnow)
+    approved_by = Column(String(80), default="PragyanAI Admin")
+
+
 class StudentModel(Base):
     __tablename__ = "students"
 
@@ -183,15 +205,62 @@ class RecruiterFeedbackModel(Base):
 
 
 # ----------------------------------------------------
-# 3. DB INITIALIZATION & AUTOMATIC CSV INGESTION
+# 3. CSV SEED INGESTION & DB INITIALIZATION
 # ----------------------------------------------------
 def init_database_from_csv():
-    """Creates all SQLite tables and loads CSV files into DB if tables are empty."""
+    """Initializes tables and populates database from CSV seed files if tables are empty."""
     Base.metadata.create_all(bind=engine)
     session = SessionLocal()
 
     try:
-        # 1. Ingest Students
+        # Default Seed Users (Admin, Head, Partner, Student)
+        if session.query(UserModel).count() == 0:
+            default_users = [
+                UserModel(
+                    username="admin",
+                    email="admin@pragyan.ai",
+                    password_hash=hash_password("admin123"),
+                    full_name="PragyanAI Executive Admin",
+                    role="PragyanAI Engine",
+                    organization_or_dept="PragyanAI Core",
+                    status="Approved",
+                    approved_by="System Genesis"
+                ),
+                UserModel(
+                    username="placement_head",
+                    email="head@pragyan.edu",
+                    password_hash=hash_password("head123"),
+                    full_name="Dr. Director Placement",
+                    role="Placement Head",
+                    organization_or_dept="Central T&P Cell",
+                    status="Approved",
+                    approved_by="PragyanAI Admin"
+                ),
+                UserModel(
+                    username="student_arjun",
+                    email="arjun@pragyan.edu",
+                    password_hash=hash_password("student123"),
+                    full_name="Arjun Sharma",
+                    role="Student",
+                    organization_or_dept="AIML",
+                    status="Approved",
+                    approved_by="Placement Cell"
+                ),
+                UserModel(
+                    username="nvidia_recruiter",
+                    email="hiring@nvidia.com",
+                    password_hash=hash_password("nvidia123"),
+                    full_name="Lead Technical Recruiter",
+                    role="Hiring Partner",
+                    organization_or_dept="NVIDIA Corporation",
+                    status="Approved",
+                    approved_by="Placement Head"
+                )
+            ]
+            session.add_all(default_users)
+            session.commit()
+
+        # Seed Students, Companies, Drives, JDs, Stages, Selections, etc.
         if session.query(StudentModel).count() == 0:
             csv_path = os.path.join(DATA_DIR, "students.csv")
             if os.path.exists(csv_path):
@@ -219,7 +288,7 @@ def init_database_from_csv():
                     ))
                 session.commit()
 
-        # 2. Ingest Companies
+        # Ingest Companies
         if session.query(CompanyModel).count() == 0:
             csv_path = os.path.join(DATA_DIR, "companies.csv")
             if os.path.exists(csv_path):
@@ -234,7 +303,7 @@ def init_database_from_csv():
                     ))
                 session.commit()
 
-        # 3. Ingest Drives
+        # Ingest Drives
         if session.query(DriveModel).count() == 0:
             csv_path = os.path.join(DATA_DIR, "drives.csv")
             if os.path.exists(csv_path):
@@ -256,7 +325,7 @@ def init_database_from_csv():
                     ))
                 session.commit()
 
-        # 4. Ingest Job Descriptions
+        # Ingest Job Descriptions
         if session.query(JobDescriptionModel).count() == 0:
             csv_path = os.path.join(DATA_DIR, "job_descriptions.csv")
             if os.path.exists(csv_path):
@@ -274,7 +343,7 @@ def init_database_from_csv():
                     ))
                 session.commit()
 
-        # 5. Ingest Candidate Stages
+        # Ingest Candidate Stages
         if session.query(CandidateStageModel).count() == 0:
             csv_path = os.path.join(DATA_DIR, "candidate_stages.csv")
             if os.path.exists(csv_path):
@@ -293,7 +362,7 @@ def init_database_from_csv():
                     ))
                 session.commit()
 
-        # 6. Ingest Drive Selections
+        # Ingest Drive Selections
         if session.query(DriveSelectionModel).count() == 0:
             csv_path = os.path.join(DATA_DIR, "drive_selections.csv")
             if os.path.exists(csv_path):
@@ -312,7 +381,7 @@ def init_database_from_csv():
                     ))
                 session.commit()
 
-        # 7. Ingest Interview Experiences
+        # Ingest Interview Experiences
         if session.query(InterviewExperienceModel).count() == 0:
             csv_path = os.path.join(DATA_DIR, "interview_experiences.csv")
             if os.path.exists(csv_path):
@@ -335,7 +404,7 @@ def init_database_from_csv():
                     ))
                 session.commit()
 
-        # 8. Ingest Training Sessions
+        # Ingest Training Sessions
         if session.query(TrainingSessionModel).count() == 0:
             csv_path = os.path.join(DATA_DIR, "training_sessions.csv")
             if os.path.exists(csv_path):
@@ -357,7 +426,7 @@ def init_database_from_csv():
                     ))
                 session.commit()
 
-        # 9. Ingest Recruiter Feedback
+        # Ingest Recruiter Feedback
         if session.query(RecruiterFeedbackModel).count() == 0:
             csv_path = os.path.join(DATA_DIR, "recruiter_feedback.csv")
             if os.path.exists(csv_path):
@@ -380,26 +449,104 @@ def init_database_from_csv():
 
 
 # ----------------------------------------------------
-# 4. HIGH-PERFORMANCE QUERY & CRUD METHODS
+# 4. AUTHENTICATION & USER GOVERNANCE HELPERS
 # ----------------------------------------------------
-def get_db_session():
-    """Provides a thread-safe database session."""
-    return SessionLocal()
-
-
-def fetch_table_as_df(model_class) -> pd.DataFrame:
-    """Reads any table directly into a clean Pandas DataFrame for analytics/pivots."""
+def authenticate_user(username: str, password: str):
+    """
+    Validates user credentials against hashed database records.
+    Returns (True, user_obj, "") on success or (False, None, error_message).
+    """
     session = SessionLocal()
     try:
-        query = session.query(model_class)
-        df = pd.read_sql(query.statement, session.bind)
-        return df
+        user = session.query(UserModel).filter(UserModel.username == username.strip()).first()
+        if not user:
+            return False, None, "User does not exist in the institutional registry."
+        
+        hashed_input = hash_password(password)
+        if user.password_hash != hashed_input:
+            return False, None, "Invalid credentials provided."
+        
+        if user.status != "Approved":
+            return False, None, f"Account status is '{user.status}'. Approval by PragyanAI Admin is required."
+        
+        return True, {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "full_name": user.full_name,
+            "role": user.role,
+            "organization_or_dept": user.organization_or_dept,
+            "status": user.status
+        }, "Authenticated successfully."
     finally:
         session.close()
 
 
+def register_user(username: str, email: str, password: str, full_name: str, role: str, org_or_dept: str = ""):
+    """Creates a new registration request with status 'Pending' awaiting PragyanAI review."""
+    session = SessionLocal()
+    try:
+        # Check uniqueness
+        if session.query(UserModel).filter(UserModel.username == username.strip()).first():
+            return False, "Username already registered."
+        if session.query(UserModel).filter(UserModel.email == email.strip().lower()).first():
+            return False, "Email address is already in use."
+
+        new_user = UserModel(
+            username=username.strip(),
+            email=email.strip().lower(),
+            password_hash=hash_password(password),
+            full_name=full_name.strip(),
+            role=role,
+            organization_or_dept=org_or_dept.strip(),
+            status="Pending",
+            approved_by="Awaiting PragyanAI Approval"
+        )
+        session.add(new_user)
+        session.commit()
+        return True, "Registration request submitted. Awaiting PragyanAI / Placement Directorate approval."
+    except Exception as e:
+        session.rollback()
+        return False, str(e)
+    finally:
+        session.close()
+
+
+def update_user_status(user_id: int, new_status: str, approved_by_name: str = "PragyanAI Admin"):
+    """Approves or Rejects a user registration and syncs changes."""
+    session = SessionLocal()
+    try:
+        user = session.query(UserModel).filter(UserModel.id == user_id).first()
+        if user:
+            user.status = new_status
+            user.approved_by = approved_by_name
+            session.commit()
+            return True, f"User {user.username} has been {new_status}."
+        return False, "User not found."
+    except Exception as e:
+        session.rollback()
+        return False, str(e)
+    finally:
+        session.close()
+
+
+def get_all_users_df() -> pd.DataFrame:
+    """Returns all users for approval review tables."""
+    return fetch_table_as_df(UserModel)
+
+
+def fetch_table_as_df(model_class) -> pd.DataFrame:
+    """Reads any SQLAlchemy model table into a Pandas DataFrame."""
+    session = SessionLocal()
+    try:
+        query = session.query(model_class)
+        return pd.read_sql(query.statement, session.bind)
+    finally:
+        session.close()
+
+
+# CRUD helpers for student, drive, company, stage updates
 def db_add_or_update_student(student_dict: dict):
-    """Inserts or updates a student record safely."""
     session = SessionLocal()
     try:
         existing = session.query(StudentModel).filter(StudentModel.id == student_dict["id"]).first()
@@ -417,7 +564,6 @@ def db_add_or_update_student(student_dict: dict):
 
 
 def db_add_drive(drive_dict: dict, jd_text: str = None):
-    """Inserts a new drive and associated job description record atomically."""
     session = SessionLocal()
     try:
         drive_obj = DriveModel(**drive_dict)
@@ -442,7 +588,6 @@ def db_add_drive(drive_dict: dict, jd_text: str = None):
 
 
 def db_add_interview_experience(exp_dict: dict):
-    """Inserts candidate multimedia debrief record."""
     session = SessionLocal()
     try:
         session.add(InterviewExperienceModel(**exp_dict))
@@ -455,7 +600,6 @@ def db_add_interview_experience(exp_dict: dict):
 
 
 def db_add_company(company_dict: dict):
-    """Registers a hiring partner for approval."""
     session = SessionLocal()
     try:
         session.add(CompanyModel(**company_dict))
@@ -467,23 +611,7 @@ def db_add_company(company_dict: dict):
         session.close()
 
 
-def db_update_company_status(company_name: str, new_status: str = "Approved"):
-    """Approves or rejects a company partner account."""
-    session = SessionLocal()
-    try:
-        comp = session.query(CompanyModel).filter(CompanyModel.company == company_name).first()
-        if comp:
-            comp.status = new_status
-            session.commit()
-    except Exception as e:
-        session.rollback()
-        raise e
-    finally:
-        session.close()
-
-
 def db_update_candidate_stage(stage_dict: dict):
-    """Upserts a candidate recruitment stage progression."""
     session = SessionLocal()
     try:
         existing = session.query(CandidateStageModel).filter(
