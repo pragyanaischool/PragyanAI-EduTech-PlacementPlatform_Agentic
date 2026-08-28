@@ -14,6 +14,7 @@ def clean_tokens(text: str) -> set:
     cleaned = re.sub(r"[^a-zA-Z0-9\s]", " ", text.lower())
     return {w.strip() for w in cleaned.split() if len(w.strip()) > 1}
 
+
 def calculate_cosine_similarity(vec_a: set, vec_b: set) -> float:
     """Calculates keyword cosine similarity metric."""
     if not vec_a or not vec_b:
@@ -23,6 +24,7 @@ def calculate_cosine_similarity(vec_a: set, vec_b: set) -> float:
     if denominator == 0:
         return 0.0
     return float(len(intersection) / denominator)
+
 
 # ----------------------------------------------------
 # 2. RAG RESUME VS. JOB DESCRIPTION MATCHER
@@ -69,7 +71,11 @@ def rag_resume_vs_jd_analysis(student_id: str, drive_id: str) -> dict:
 
     # Full context synthesis
     jd_record = jds[jds["Drive_ID"] == drive_id] if not jds.empty else pd.DataFrame()
-    full_jd_text = jd_record.iloc[0]["Full_JD_Text"] if not jd_record.empty and "Full_JD_Text" in jd_record.columns else str(drive.get("Description", ""))
+    full_jd_text = (
+        jd_record.iloc[0]["Full_JD_Text"]
+        if not jd_record.empty and "Full_JD_Text" in jd_record.columns
+        else str(drive.get("Description", ""))
+    )
 
     student_corpus = f"{student.get('Skills', '')} {student.get('Projects', '')} {student.get('Experience', '')} {student.get('Dream_Roles', '')}"
     jd_corpus = f"{drive.get('Role', '')} {drive.get('Required_Skills', '')} {full_jd_text}"
@@ -98,6 +104,7 @@ def rag_resume_vs_jd_analysis(student_id: str, drive_id: str) -> dict:
         "missing_skills": missing if missing else ["None (Full Skill Alignment)"],
         "recommendation": "Strong Fit for Technical Juries" if match_score >= 75 else "Recommended for Targeted Bootcamps"
     }
+
 
 # ----------------------------------------------------
 # 3. SELECTION DIFFERENCE & DELTA ANALYSIS
@@ -136,6 +143,7 @@ def analyze_selection_differences(company_name: str) -> dict:
         ]
     }
 
+
 # ----------------------------------------------------
 # 4. UNIFIED CHAT QUERY ROUTER
 # ----------------------------------------------------
@@ -153,25 +161,25 @@ def handle_placement_chat(query: str, user_role: str, user_context: dict = None)
         stu_id = user_context.get("student_id") if user_context else None
         if stu_id:
             if stages_df.empty:
-                return f" No active recruitment rounds found for Student ID **{stu_id}**."
+                return f"ℹ️ No active recruitment rounds found for Student ID **{stu_id}**."
             s_stages = stages_df[stages_df["Student_ID"] == stu_id]
             if s_stages.empty:
-                return f" No active recruitment rounds found for Student ID **{stu_id}**."
-            lines = [f"###  Live Round Pipeline for {stu_id}:"]
+                return f"ℹ️ No active recruitment rounds found for Student ID **{stu_id}**."
+            lines = [f"### 📌 Live Round Pipeline for {stu_id}:"]
             for _, r in s_stages.iterrows():
                 lines.append(f"- **{r.get('Company', 'N/A')} ({r.get('Role', 'N/A')})** $\\rightarrow$ Current Stage: `{r.get('Current_Round', 'N/A')}` | Scheduled: `{r.get('Next_Round_Date', 'TBD')}` | Location: `{r.get('Mode_Location', 'Online')}`")
             return "\n".join(lines)
         elif not stages_df.empty:
-            return f" Currently tracking **{len(stages_df)}** active candidate stage transitions across campus drives. Please provide your Student ID to filter your specific status."
+            return f"ℹ️ Currently tracking **{len(stages_df)}** active candidate stage transitions across campus drives. Please provide your Student ID to filter your specific status."
 
     # 2. Workshop, Bootcamp & Guest Lecture Query
     if any(k in q for k in ["workshop", "bootcamp", "guest lecture", "training", "masterclass", "session"]):
         if not workshops_df.empty:
-            lines = ["###  Upcoming Workshops & Training Sessions:"]
+            lines = ["### 🛠️ Upcoming Workshops & Training Sessions:"]
             for _, w in workshops_df.head(5).iterrows():
                 lines.append(f"- **[{w.get('Type', 'Training')}] {w.get('Title', 'Session')}** by *{w.get('Instructor', 'Faculty')}*\n  - 📅 **Date:** `{w.get('Schedule_Date', 'TBD')} ({w.get('Timing', '')})` | 📍 **Venue/Mode:** `{w.get('Location', w.get('Mode', 'Hybrid'))}`\n  - 🎯 **Target:** `{w.get('Target_Depts', 'All')}`")
             return "\n".join(lines)
-        return " No scheduled workshops or bootcamps found in the system right now."
+        return "ℹ️ No scheduled workshops or bootcamps found in the system right now."
 
     # 3. Recruiter Feedback & Skill Gap Query
     if any(k in q for k in ["gap", "skill gap", "recruiter feedback", "feedback", "curriculum", "weakness"]):
@@ -181,9 +189,9 @@ def handle_placement_chat(query: str, user_role: str, user_context: dict = None)
                 if comp.lower() in q:
                     matched_feed = feedback_df[feedback_df["Company"].str.lower() == comp.lower()]
                     break
-            lines = ["###  Recruiter Feedback & Identified Skill Gaps:"]
+            lines = ["### 📝 Recruiter Feedback & Identified Skill Gaps:"]
             for _, f in matched_feed.head(3).iterrows():
-                lines.append(f"-  **{f.get('Company', 'Partner')}** (Dept: `{f.get('Dept_Evaluated', 'All')}` | Rating: `{f.get('Overall_Rating', 'N/A')}/5.0`)\n  - **Strengths:** {f.get('Strong_Areas', 'N/A')}\n  - **Gaps Observed:** {f.get('Observed_Gaps', 'N/A')}\n  - **Suggested Fix:** {f.get('Recommended_Curriculum_Fixes', 'N/A')}")
+                lines.append(f"- 🏢 **{f.get('Company', 'Partner')}** (Dept: `{f.get('Dept_Evaluated', 'All')}` | Rating: `{f.get('Overall_Rating', 'N/A')}/5.0`)\n  - **Strengths:** {f.get('Strong_Areas', 'N/A')}\n  - **Gaps Observed:** {f.get('Observed_Gaps', 'N/A')}\n  - **Suggested Fix:** {f.get('Recommended_Curriculum_Fixes', 'N/A')}")
             return "\n".join(lines)
 
     # 4. Top Package & Highest CTC Query
@@ -192,19 +200,19 @@ def handle_placement_chat(query: str, user_role: str, user_context: dict = None)
             placed = students_df[students_df["Status"].isin(["Placed", "Selected"])]
             if not placed.empty:
                 top_student = placed.sort_values(by="Package_LPA", ascending=False).iloc[0]
-                return f" **Highest Package Secured:** **₹{top_student['Package_LPA']} LPA** at **{top_student.get('Company', 'N/A')}** for role *{top_student.get('Role', 'N/A')}* by **{top_student.get('Name', 'Student')}** ({top_student.get('Dept', 'N/A')})."
-        return " No placement salary records available for highest package computation."
+                return f"🏆 **Highest Package Secured:** **₹{top_student['Package_LPA']} LPA** at **{top_student.get('Company', 'N/A')}** for role *{top_student.get('Role', 'N/A')}* by **{top_student.get('Name', 'Student')}** ({top_student.get('Dept', 'N/A')})."
+        return "ℹ️ No placement salary records available for highest package computation."
 
     # 5. Cross-Department Clearance Query
     if any(k in q for k in ["who cleared", "selected from", "candidates in", "shortlisted", "placed in"]):
         for dept in ["cse", "aiml", "aids", "ise", "ece", "eee", "mech", "robotics", "civil", "biotech"]:
             if dept in q:
                 if stages_df.empty:
-                    return f" No candidate pipeline entries found for **{dept.upper()}**."
+                    return f"ℹ️ No candidate pipeline entries found for **{dept.upper()}**."
                 matched = stages_df[stages_df["Dept"].str.lower() == dept]
                 if matched.empty:
-                    return f" No candidate pipeline entries found for **{dept.upper()}**."
-                lines = [f"###  Candidates in Recruitment Pipeline from {dept.upper()}:"]
+                    return f"ℹ️ No candidate pipeline entries found for **{dept.upper()}**."
+                lines = [f"### 📋 Candidates in Recruitment Pipeline from {dept.upper()}:"]
                 for _, r in matched.head(10).iterrows():
                     lines.append(f"- **{r.get('Student_Name', 'Candidate')}** ({r.get('Student_ID', 'ID')}) $\\rightarrow$ **{r.get('Company', 'Company')}** (`{r.get('Current_Round', 'Stage')}`)")
                 return "\n".join(lines)
@@ -216,7 +224,7 @@ def handle_placement_chat(query: str, user_role: str, user_context: dict = None)
                 if comp.lower() in q:
                     d = drives_df[drives_df["Company"].str.lower() == comp.lower()].iloc[0]
                     return (
-                        f"###  Drive Profile: {d.get('Company', comp)} ({d.get('Role', 'Engineering Role')})\n"
+                        f"### 🏢 Drive Profile: {d.get('Company', comp)} ({d.get('Role', 'Engineering Role')})\n"
                         f"- **CTC Offered:** ₹{d.get('Package_LPA', 0.0)} LPA\n"
                         f"- **Cutoff CGPA:** {d.get('Min_CGPA', 0.0)}\n"
                         f"- **Eligible Branches:** `{d.get('Eligible_Depts', 'All')}`\n"
@@ -247,8 +255,12 @@ def handle_placement_chat(query: str, user_role: str, user_context: dict = None)
                     d_total = len(dept_students)
                     d_placed = len(dept_students[dept_students["Status"].isin(["Placed", "Selected"])])
                     d_rate = round((d_placed / d_total * 100), 1)
-                    d_avg_pkg = round(float(dept_students[dept_students["Status"].isin(["Placed", "Selected"])]["Package_LPA"].mean()), 2) if d_placed > 0 else 0.0
-                    return f" **{dept.upper()} Placement Analytics:**\n- **Total Batch:** {d_total:,} candidates\n- **Placed:** {d_placed:,} candidates ({d_rate}%)\n- **Average CTC:** ₹{d_avg_pkg} LPA"
+                    d_avg_pkg = (
+                        round(float(dept_students[dept_students["Status"].isin(["Placed", "Selected"])]["Package_LPA"].mean()), 2)
+                        if d_placed > 0
+                        else 0.0
+                    )
+                    return f"📊 **{dept.upper()} Placement Analytics:**\n- **Total Batch:** {d_total:,} candidates\n- **Placed:** {d_placed:,} candidates ({d_rate}%)\n- **Average CTC:** ₹{d_avg_pkg} LPA"
 
     # 9. Generic Analytics Query
     if any(k in q for k in ["placement rate", "how many placed", "total placed", "overall stats"]):
@@ -256,11 +268,15 @@ def handle_placement_chat(query: str, user_role: str, user_context: dict = None)
             total = len(students_df)
             placed = len(students_df[students_df["Status"].isin(["Placed", "Selected"])])
             rate = round((placed / total * 100), 1) if total > 0 else 0
-            avg_all_pkg = round(float(students_df[students_df["Status"].isin(["Placed", "Selected"])]["Package_LPA"].mean()), 2) if placed > 0 else 0.0
-            return f" **Current Institutional Placement Rate:** **{rate}%** ({placed:,} placed out of {total:,} students) | **Average Placed CTC:** ₹{avg_all_pkg} LPA."
+            avg_all_pkg = (
+                round(float(students_df[students_df["Status"].isin(["Placed", "Selected"])]["Package_LPA"].mean()), 2)
+                if placed > 0
+                else 0.0
+            )
+            return f"📊 **Current Institutional Placement Rate:** **{rate}%** ({placed:,} placed out of {total:,} students) | **Average Placed CTC:** ₹{avg_all_pkg} LPA."
 
     return (
-        f" **PragyanAI Copilot ({user_role} View):**\n"
+        f"🤖 **PragyanAI Copilot ({user_role} View):**\n"
         f"I can answer questions regarding:\n"
         f"1. **Student Status:** 'What is my next round for Google?'\n"
         f"2. **Department Pipeline:** 'Who cleared rounds in AIML?' or 'CSE placement stats'\n"
