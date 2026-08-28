@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 
 from src.db import init_db
+from src.database import authenticate_user, register_user, update_user_status, get_all_users_df
 
 # ----------------------------------------------------
 # 1. PAGE CONFIGURATION & METADATA
@@ -33,53 +34,155 @@ if "students" not in st.session_state:
     with st.spinner("Initializing SQLite database & loading CSV seed records..."):
         init_db()
 
+if "authenticated_user" not in st.session_state:
+    st.session_state.authenticated_user = None
+
+
 # ----------------------------------------------------
-# 4. SIDEBAR NAVIGATION & RBAC CONTROLLER
+# 4. AUTHENTICATION & LOGIN / REGISTRATION GATEWAY
+# ----------------------------------------------------
+def render_auth_gateway():
+    """Renders the secure Login & Self-Registration Portal."""
+    if os.path.exists(BANNER_PATH):
+        st.image(BANNER_PATH, use_container_width=True)
+
+    col_l, col_center, col_r = st.columns([1, 2, 1])
+
+    with col_center:
+        st.markdown("### 🔐 PragyanAI Institutional Access Portal")
+        st.caption("Sign in to your authorized account or submit a self-registration request for approval.")
+
+        tab_login, tab_register, tab_public = st.tabs(["🔑 Sign In", "📝 Create Account", "🏆 Public Wall of Fame"])
+
+        # --- TAB 1: LOGIN ---
+        with tab_login:
+            with st.form("login_form"):
+                username_input = st.text_input("Username or Institutional ID")
+                password_input = st.text_input("Password", type="password")
+                submit_login = st.form_submit_button("🚀 Authenticate & Enter", use_container_width=True, type="primary")
+
+                if submit_login:
+                    if not username_input or not password_input:
+                        st.error("Please provide both username and password.")
+                    else:
+                        success, user_payload, msg = authenticate_user(username_input, password_input)
+                        if success:
+                            st.session_state.authenticated_user = user_payload
+                            st.success(f"Welcome, {user_payload['full_name']} ({user_payload['role']})!")
+                            st.rerun()
+                        else:
+                            st.error(f"Authentication Failed: {msg}")
+
+            st.markdown("---")
+            st.markdown("💡 **Default Demo Accounts for Instant Access:**")
+            demo_df = pd.DataFrame([
+                {"Role": "PragyanAI Engine / Admin", "Username": "admin", "Password": "admin123"},
+                {"Role": "Placement Head", "Username": "placement_head", "Password": "head123"},
+                {"Role": "Student (AIML)", "Username": "student_arjun", "Password": "student123"},
+                {"Role": "Hiring Partner (NVIDIA)", "Username": "nvidia_recruiter", "Password": "nvidia123"}
+            ])
+            st.dataframe(demo_df, use_container_width=True, hide_index=True)
+
+        # --- TAB 2: REGISTER ---
+        with tab_register:
+            st.markdown("##### 📝 Submit Registration for PragyanAI Approval")
+            with st.form("register_form"):
+                reg_name = st.text_input("Full Name *")
+                reg_email = st.text_input("Email Address *")
+                reg_user = st.text_input("Desired Username *")
+                reg_pass = st.text_input("Password *", type="password")
+                reg_role = st.selectbox(
+                    "Select Requested Role *",
+                    [
+                        "Student",
+                        "Placement Head",
+                        "Placement Team",
+                        "Hiring Partner",
+                        "HOD / Principal / Management",
+                        "PragyanAI Engine"
+                    ]
+                )
+                reg_org = st.text_input("Department / Organization (e.g. 'AIML' or 'Google Inc.')")
+
+                submit_reg = st.form_submit_button("📩 Submit for Verification", use_container_width=True)
+
+                if submit_reg:
+                    if not reg_name or not reg_email or not reg_user or not reg_pass:
+                        st.error("Please fill in all mandatory fields (*).")
+                    else:
+                        success, reg_msg = register_user(
+                            username=reg_user,
+                            email=reg_email,
+                            password=reg_pass,
+                            full_name=reg_name,
+                            role=reg_role,
+                            org_or_dept=reg_org
+                        )
+                        if success:
+                            st.success(reg_msg)
+                            st.info("ℹ️ Your account has been saved with **Status: Pending**. The PragyanAI Engine / Placement Administrator can approve it from their console.")
+                        else:
+                            st.error(f"Registration Error: {reg_msg}")
+
+        # --- TAB 3: PUBLIC ACCESS ---
+        with tab_public:
+            st.info("You can view public placement honors and achievers without signing in.")
+            if st.button("🌟 Proceed to Wall of Fame (Guest Mode)", use_container_width=True):
+                st.session_state.authenticated_user = {
+                    "username": "guest",
+                    "full_name": "Public Visitor",
+                    "role": "Public / Wall of Fame",
+                    "status": "Approved"
+                }
+                st.rerun()
+
+
+# ----------------------------------------------------
+# 5. CHECK AUTHENTICATION STATE
+# ----------------------------------------------------
+if st.session_state.authenticated_user is None:
+    render_auth_gateway()
+    st.stop()
+
+# User is Authenticated
+current_user = st.session_state.authenticated_user
+user_role = current_user["role"]
+
+# ----------------------------------------------------
+# 6. SIDEBAR NAVIGATION & PRAGYANAI APPROVAL CONTROLLER
 # ----------------------------------------------------
 with st.sidebar:
     if os.path.exists(LOGO_PATH):
-        st.image(LOGO_PATH, width=120)
+        st.image(LOGO_PATH, width=110)
     else:
         st.title("🎓 PragyanAI")
 
-    st.markdown("### 🏛️ Institutional Portal")
-    st.caption("AI-Powered Campus Recruitment & Skill Telemetry Suite")
-    st.markdown("---")
+    st.markdown(f"**Logged In:** {current_user['full_name']}")
+    st.caption(f"Role: `{user_role}` • Status: 🟢 `{current_user.get('status', 'Approved')}`")
 
-    # Role-Based Access Selector
-    user_role = st.selectbox(
-        "Select Active RBAC Persona:",
-        [
-            "Student",
-            "Placement Head",
-            "Placement Team",
-            "Hiring Partner",
-            "HOD / Principal / Management",
-            "PragyanAI Engine",
-            "Public / Wall of Fame"
-        ],
-        index=0
-    )
+    if st.button("🚪 Sign Out", use_container_width=True):
+        st.session_state.authenticated_user = None
+        st.rerun()
 
     st.markdown("---")
 
-    # Global Cohort Telemetry Widget in Sidebar
+    # Global Cohort Telemetry Widget
     if "students" in st.session_state and not st.session_state.students.empty:
         df_stu = st.session_state.students
         total_cand = len(df_stu)
         placed_cand = len(df_stu[df_stu["Status"].isin(["Placed", "Selected"])])
         p_rate = round((placed_cand / total_cand * 100), 1) if total_cand > 0 else 0.0
 
-        st.markdown("**📊 Institutional Snapshot**")
+        st.markdown("**📊 Live Institutional Telemetry**")
         st.write(f"- **Enrolled Batch:** `{total_cand:,}`")
         st.write(f"- **Placed Scholars:** `{placed_cand:,}`")
         st.write(f"- **Placement Conversion:** `{p_rate}%`")
 
     st.markdown("---")
-    st.caption("PragyanAI Placement Suite • v2.0.0 (2026)")
+    st.caption("PragyanAI Enterprise Portal • v2.0.0 (2026)")
 
 # ----------------------------------------------------
-# 5. MULTI-PAGE PAGE DEFINITIONS & RBAC ROUTING
+# 7. MULTI-PAGE DEFINITIONS & RBAC ROUTING
 # ----------------------------------------------------
 student_page = st.Page(
     "views/1_Student_Hub.py",
@@ -118,7 +221,7 @@ exec_page = st.Page(
 
 pragyan_page = st.Page(
     "views/6_PragyanAI_Engine.py",
-    title="PragyanAI Skill Telemetry",
+    title="PragyanAI Skill Telemetry & Approvals",
     icon="⚡",
     default=(user_role == "PragyanAI Engine")
 )
@@ -130,11 +233,9 @@ wall_of_fame_page = st.Page(
     default=(user_role == "Public / Wall of Fame")
 )
 
-# Enforce Navigation Routing based on Selected Persona
+# RBAC Routing Based on Verified User Persona
 if user_role == "Student":
-    nav = st.navigation({
-        "Candidate Workspace": [student_page, wall_of_fame_page]
-    })
+    nav = st.navigation({"Candidate Workspace": [student_page, wall_of_fame_page]})
 elif user_role == "Placement Head":
     nav = st.navigation({
         "Directorate Control": [head_page, team_page, exec_page],
@@ -146,24 +247,16 @@ elif user_role == "Placement Team":
         "Institutional Ledger": [wall_of_fame_page, exec_page]
     })
 elif user_role == "Hiring Partner":
-    nav = st.navigation({
-        "Recruiter Terminal": [company_page, wall_of_fame_page]
-    })
+    nav = st.navigation({"Recruiter Terminal": [company_page, wall_of_fame_page]})
 elif user_role == "HOD / Principal / Management":
-    nav = st.navigation({
-        "Strategic Governance": [exec_page, wall_of_fame_page, pragyan_page]
-    })
+    nav = st.navigation({"Strategic Governance": [exec_page, wall_of_fame_page, pragyan_page]})
 elif user_role == "PragyanAI Engine":
-    nav = st.navigation({
-        "AI Telemetry & Diagnostics": [pragyan_page, exec_page, wall_of_fame_page]
-    })
-else:  # Public / Wall of Fame
-    nav = st.navigation({
-        "Honors & Achievers": [wall_of_fame_page, exec_page]
-    })
+    nav = st.navigation({"AI Telemetry, Approvals & Governance": [pragyan_page, exec_page, head_page, wall_of_fame_page]})
+else:  # Public
+    nav = st.navigation({"Honors & Achievers": [wall_of_fame_page]})
 
 # ----------------------------------------------------
-# 6. BANNER HEADER & PAGE EXECUTION
+# 8. BANNER HEADER & VIEW EXECUTION
 # ----------------------------------------------------
 if os.path.exists(BANNER_PATH):
     st.image(BANNER_PATH, use_container_width=True)
